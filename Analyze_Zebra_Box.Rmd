@@ -1,0 +1,161 @@
+---
+title: "Analyze Zebra Box"
+---
+## Usage: This script analyzes the output of zebrafish video recording data taken by ZebraBox and displays summary data such as movement over time, average distance moved, average duration moved, and average speed by experimental condition group. 
+
+## REQUIRED: Prior to running this code, please generate an .xlsx/.xls file with a column labeled "Type" including a label for the injected/experimental condition of each fish this is the 'wells' file found in the 'Load in data' section
+
+```{r}
+# Install Necessary Packages -------------------------------------------------
+install.packages("xlsx", dependencies = TRUE)
+install.packages("ggplot2", dependencies = TRUE)
+install.packages("ggpubr", dependencies = TRUE)
+install.packages("ggsignif")
+install.packages("dplyr")
+install.packages("readxl")
+```
+
+```{r}
+# Load Necessary Packages -------------------------------------------------
+library("readxl")
+library("xlsx")
+library("ggplot2")
+library("ggpubr")
+library("ggsignif")
+library("dplyr")
+```
+
+```{r}
+# Customize Gene Name Here ------------------------------------------------
+gene <- "Example Data" #Change this line to reflect your gene name
+
+comp = list(c("knockout", "wildtype"), c("knockout", "injection_control"), c("injection_control", "wildtype")) #Designate which fish experimental condition group you would like to compare for p-value calculation
+
+# Customize Save File -----------------------------------------------------
+gene_name <- gsub(" ", "_", gene, fixed = TRUE)
+save_name <- paste("ZBox_",gene_name,".pdf",sep="") #Change file name here - default save will be "FishInspector_gene.pdf"
+```
+
+```{r}
+# Load in data: Customize Files Locations Here ----------------------------
+file_1 <- read_excel("~/Desktop/Analyze_Zebra_Box/example_data_1.xlsx") #Change this line to your own file path
+wells_file_1 <- read_excel("~/Desktop/Analyze_Zebra_Box/example_data_wells_1.xls") #Please provide an .xlsx/.xls file with well designations and fish experimental condition group (ex: A1 wildtype)
+
+Type <-rep((unlist(wells_file_1[,2])),times=240)
+file_1_type <- cbind(Type, file_1)
+
+all_type <- file_1_type 
+
+all_type <- all_type[all_type$Type != "EMPTY",] #Removes all wells labeled as 'EMPTY'
+```
+
+```{r}
+#Calculate Average Distance and Duration for File 1 ----------------------
+file_1_df <- file_1 %>%
+  select(location, lardist, lardur) %>%
+  group_by(location) %>%
+  summarize(Average_Distance=mean(lardist), Average_Duration=mean(lardur))
+
+file_1_df <- cbind(wells_file_1, file_1_df)
+
+all_files <- file_1_df 
+
+#Remove Spurious Data
+all_files <- all_files[all_files$Type != "EMPTY",] # Remove EMPTY wells
+#all_files <- all_files[all_files$Average_Duration >50,] # Remove likely dead fish
+
+#Group Fish Longitudinally by Experimental Condition (Type)
+options(dplyr.summarise.inform = FALSE)
+group_type <- all_files %>%
+  group_by(Type) %>%
+  summarize(Average_Distance=mean(Average_Distance), Err_Dist=sd(Average_Distance)/sqrt(n()), Average_Duration=mean(Average_Duration), Err_Dur=sd(Average_Duration)/sqrt(n()), Distance_Duration=mean(Average_Distance/Average_Duration), Err_Dist_Durr=sd(Average_Distance/Average_Duration)/sqrt(n()), n = n()) 
+
+group_type <- all_type %>%
+  group_by(Type, start) %>%
+  summarize(Average_Distance=mean(lardist), n=n())
+
+fish_numbs <- data.frame(c(unique(group_type[,1]),unique(group_type[,4])))
+fish_numbs <- paste(unlist(split(fish_numbs, seq(nrow(fish_numbs)))), collapse = " ")
+```
+
+```{r}
+#If needed, Load in a second Zebra Box file ---------------------------
+file_2 <- read_excel("~/Desktop/Analyze_Zebra_Box/example_data_2.xlsx")
+wells_file_2 <- read_excel("~/Desktop/Analyze_Zebra_Box/example_data_wells_2.xls")
+
+Type <-rep((unlist(wells_file_2[,2])),times=240)
+file_2_type <- cbind(Type, file_2)
+
+all_type <- rbind(file_1_type,file_2_type) 
+
+all_type <- all_type[all_type$Type != "EMPTY",] #Removes all wells labeled as 'EMPTY'
+```
+
+```{r}
+#Calculate Average Distance and Duration for File 2 ----------------------
+file_2_df <- file_2 %>%
+  select(location, lardist, lardur) %>%
+  group_by(location) %>%
+  summarize(Average_Distance=mean(lardist), Average_Duration=mean(lardur))
+
+file_2_df <- cbind(wells_file_2, file_2_df)
+
+#Merge Files + Add additional files as needed ---------------------------
+all_files <- rbind(file_1_df,file_2_df) 
+
+#Remove Spurious Data
+all_files <- all_files[all_files$Type != "EMPTY",] # Remove EMPTY wells
+#all_files <- all_files[all_files$Average_Duration >50,] # Remove likely dead fish
+
+#Group Fish Longitudinally by Experimental Condition (Type)
+group_type <- all_files %>%
+  group_by(Type) %>%
+  summarize(Average_Distance=mean(Average_Distance), Err_Dist=sd(Average_Distance)/sqrt(n()), Average_Duration=mean(Average_Duration), Err_Dur=sd(Average_Duration)/sqrt(n()), Distance_Duration=mean(Average_Distance/Average_Duration), Err_Dist_Durr=sd(Average_Distance/Average_Duration)/sqrt(n()), n = n()) 
+
+group_type <- all_type %>%
+  group_by(Type, start) %>%
+  summarize(Average_Distance=mean(lardist), n=n())
+
+fish_numbs <- data.frame(c(unique(group_type[,1]),unique(group_type[,4])))
+fish_numbs <- paste(unlist(split(fish_numbs, seq(nrow(fish_numbs)))), collapse = " ")
+```
+
+```{r dev = "pdf", dpi = 300}
+# Generate Box Plots ------------------------------------------------------
+# Average  Distance Moved
+plot1 <- ggplot(all_files, mapping=aes(x=Type, y=Average_Distance)) +
+  geom_boxplot() + theme_bw() + 
+  ggtitle("Average Distance Moved") + theme(plot.title = element_text(hjust = 0.5)) + ylab("Distance") + xlab("") + 
+  geom_signif(comparisons = comp, map_signif_level = FALSE, step_increase = 0.1)
+
+#Average Duration Moved
+plot2 <- ggplot(all_files, mapping=aes(x=Type, y=Average_Duration)) +
+  geom_boxplot() + theme_bw() + 
+  ggtitle("Average Duration Moved") + theme(plot.title = element_text(hjust = 0.5)) + ylab("Duration") + xlab("") + 
+  geom_signif(comparisons = comp, map_signif_level = FALSE, step_increase = 0.1)
+
+#Average Distance/Duration Moved
+plot3 <- ggplot(all_files, mapping=aes(x=Type, y=Average_Distance/Average_Duration )) +
+  geom_boxplot() + theme_bw() + 
+  ggtitle("Average Speed") + theme(plot.title = element_text(hjust = 0.5)) + ylab("Distance/Duration") + xlab("") + 
+  geom_signif(comparisons = comp, map_signif_level = FALSE, step_increase = 0.1)
+
+
+#Distance Over Time
+plot4 <- ggplot(group_type, mapping=aes(x=start, y=Average_Distance, color=Type))+
+geom_smooth() + theme_bw() + 
+geom_vline(xintercept = 3600, linetype="dashed", color = "grey") +
+ggtitle("Distance Over Time") + theme(plot.title = element_text(hjust = 0.5)) + ylab("Distance Moved") + xlab("Time (seconds)")
+  
+
+#Display Plots
+fig <- ggarrange(plot4,                                     
+        ggarrange(plot1, plot2, plot3, ncol = 3, labels = c("B","C","D")),
+        nrow = 2, labels = "A" )
+plot(fig)
+annotate_figure(fig, top = gene, bottom = fish_numbs)
+
+ggsave(save_name, plot = last_plot(), width = 12, height = 12, dpi = 300) #Change dimensions of saved PDF here
+
+dev.off()          
+```
