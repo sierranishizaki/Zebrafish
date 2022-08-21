@@ -7,7 +7,7 @@ This script analyzes the output of zebrafish video recording data taken by Zebra
 Available for download from dropbox:
 
 ```
-wget "https://www.dropbox.com/sh/u1g2c6yg8xced52/AACILOQoKlEL0EjtqQwGS1Xda?dl=0"
+https://www.dropbox.com/sh/u1g2c6yg8xced52/AACILOQoKlEL0EjtqQwGS1Xda?dl=0
 ```
 
 
